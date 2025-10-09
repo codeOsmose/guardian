@@ -1,0 +1,28 @@
+# Arquivo: .gitignore
+
+### Java/Maven ###
+.project
+.settings
+target/
+*.jar
+*.war
+*.ear
+
+### Node.js/React Native ###
+node_modules/
+npm-debug.log
+yarn-error.log
+.expo/
+.idea/
+dist/
+build/
+
+### IDEs e Sistema Operacional ###
+.vscode/
+.idea/
+*.iml
+*.DS_Store
+/nbproject/
+
+# Arquivos de log
+*.log
