@@ -1,362 +1,388 @@
+// frontend/src/Dashboard.js (CRUD COMPLETO)
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
-import Icon from 'react-native-vector-icons/Feather'; // Exemplo de ícone, você precisará instalar
+import { 
+    StyleSheet, 
+    Text, 
+    View, 
+    FlatList, 
+    TouchableOpacity, 
+    TextInput, 
+    Modal, 
+    Alert,
+    ActivityIndicator 
+} from 'react-native';
+import Feather from 'react-native-vector-icons/Feather';
 
-const Dashboard = ({ onLogout }) => {
-  const [subscriptions, setSubscriptions] = useState([
-    { id: '1', name: 'Netflix', price: 45.90, renewalDate: '2025-11-15', category: 'Streaming' },
-    { id: '2', name: 'Spotify', price: 21.90, renewalDate: '2025-11-10', category: 'Música' },
-    { id: '3', name: 'Amazon Prime', price: 14.90, renewalDate: '2025-11-20', category: 'Streaming' },
-  ]);
+const API_BASE_URL = 'http://10.0.2.2:8080';
 
-  const totalMonthly = subscriptions.reduce((sum, sub) => sum + sub.price, 0);
+const Dashboard = ({ authToken, onLogout }) => {
+    const [subscriptions, setSubscriptions] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isAddModalVisible, setIsAddModalVisible] = useState(false);
+    const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+    
+    // Estados para o novo formulário de assinatura (CRIAR)
+    const [newTitle, setNewTitle] = useState('');
+    const [newCost, setNewCost] = useState('');
+    const [newDate, setNewDate] = useState('');
+    
+    // Estado para o item selecionado para edição
+    const [editingItem, setEditingItem] = useState(null);
+    const [editTitle, setEditTitle] = useState('');
+    const [editCost, setEditCost] = useState('');
+    const [editDate, setEditDate] = useState('');
 
-  const handleDelete = (id) => {
-    Alert.alert(
-      'Confirmar Exclusão',
-      'Tem certeza que deseja excluir esta assinatura?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Excluir', onPress: () => setSubscriptions(subscriptions.filter(sub => sub.id !== id)), style: 'destructive' },
-      ],
-      { cancelable: true }
+    // Função de validação de data
+    const validateDate = (date) => {
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        return dateRegex.test(date);
+    };
+
+    // -------------------------------------------------------------------
+    // R (Read): BUSCAR ASSINATURAS
+    // -------------------------------------------------------------------
+    const fetchSubscriptions = React.useCallback(async () => {
+        if (!authToken) {
+            onLogout();
+            return;
+        }
+        setIsLoading(true);
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/subscriptions`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`,
+                },
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setSubscriptions(data);
+            } else if (response.status === 401) {
+                Alert.alert('Sessão Expirada', 'Faça login novamente.');
+                onLogout();
+            } else {
+                const errorData = await response.json();
+                Alert.alert('Erro', errorData.message || 'Erro ao carregar.');
+            }
+        } catch (error) {
+            console.error('Erro de conexão ao buscar:', error);
+            Alert.alert('Erro de Rede', 'Verifique a conexão com o servidor Spring Boot.');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [authToken, onLogout]);
+
+    // -------------------------------------------------------------------
+    // C (Create): ADICIONAR ASSINATURA (mantida e melhorada)
+    // -------------------------------------------------------------------
+    const handleAddSubscription = async () => {
+        if (!newTitle || !newCost || !newDate) {
+            Alert.alert('Erro', 'Preencha todos os campos.');
+            return;
+        }
+        if (!validateDate(newDate)) {
+             Alert.alert('Erro', 'Use o formato de data AAAA-MM-DD (Ex: 2025-05-20).');
+             return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/subscriptions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`,
+                },
+                body: JSON.stringify({ 
+                    title: newTitle, 
+                    cost: parseFloat(newCost), 
+                    dueDate: newDate,
+                }),
+            });
+
+            if (response.ok) {
+                Alert.alert('Sucesso!', 'Assinatura adicionada.');
+                setIsAddModalVisible(false);
+                setNewTitle('');
+                setNewCost('');
+                setNewDate('');
+                fetchSubscriptions(); // Recarrega
+            } else {
+                const errorData = await response.json();
+                Alert.alert('Erro', errorData.message || 'Falha ao adicionar.');
+            }
+        } catch (error) {
+            console.error('Erro de conexão ao adicionar:', error);
+            Alert.alert('Erro de Rede', 'Verifique a conexão com o servidor Spring Boot.');
+        }
+    };
+
+    // -------------------------------------------------------------------
+    // U (Update): ATUALIZAR ASSINATURA
+    // -------------------------------------------------------------------
+    const handleUpdateSubscription = async () => {
+        if (!editingItem || !editTitle || !editCost || !editDate) return;
+        
+        if (!validateDate(editDate)) {
+             Alert.alert('Erro', 'Use o formato de data AAAA-MM-DD (Ex: 2025-05-20).');
+             return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/subscriptions/${editingItem.id}`, {
+                method: 'PUT', // Usando PUT para atualizar o recurso completo
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`,
+                },
+                body: JSON.stringify({ 
+                    id: editingItem.id,
+                    title: editTitle, 
+                    cost: parseFloat(editCost), 
+                    dueDate: editDate,
+                }),
+            });
+
+            if (response.ok) {
+                Alert.alert('Sucesso!', 'Assinatura atualizada.');
+                setIsEditModalVisible(false);
+                setEditingItem(null);
+                fetchSubscriptions(); // Recarrega
+            } else {
+                const errorData = await response.json();
+                Alert.alert('Erro', errorData.message || 'Falha ao atualizar.');
+            }
+        } catch (error) {
+            console.error('Erro de conexão ao atualizar:', error);
+            Alert.alert('Erro de Rede', 'Verifique a conexão com o servidor Spring Boot.');
+        }
+    };
+    
+    // -------------------------------------------------------------------
+    // D (Delete): DELETAR ASSINATURA
+    // -------------------------------------------------------------------
+    const handleDeleteSubscription = (itemId) => {
+        Alert.alert(
+            "Confirmar Exclusão",
+            "Tem certeza que deseja deletar esta assinatura?",
+            [
+                { text: "Cancelar", style: "cancel" },
+                { text: "Deletar", style: "destructive", onPress: () => confirmDelete(itemId) }
+            ]
+        );
+    };
+
+    const confirmDelete = async (itemId) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/subscriptions/${itemId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${authToken}`,
+                },
+            });
+
+            if (response.ok) {
+                Alert.alert('Sucesso!', 'Assinatura deletada.');
+                fetchSubscriptions(); // Recarrega
+            } else {
+                const errorData = await response.json();
+                Alert.alert('Erro', errorData.message || 'Falha ao deletar.');
+            }
+        } catch (error) {
+            console.error('Erro de conexão ao deletar:', error);
+            Alert.alert('Erro de Rede', 'Verifique a conexão com o servidor Spring Boot.');
+        }
+    };
+    
+    // -------------------------------------------------------------------
+    // SETUP DE EDIÇÃO
+    // -------------------------------------------------------------------
+    const openEditModal = (item) => {
+        setEditingItem(item);
+        setEditTitle(item.title);
+        setEditCost(item.cost.toString());
+        setEditDate(item.dueDate || '');
+        setIsEditModalVisible(true);
+    };
+
+    useEffect(() => {
+        fetchSubscriptions();
+    }, [authToken, fetchSubscriptions]);
+
+    // -------------------------------------------------------------------
+    // UI RENDERING
+    // -------------------------------------------------------------------
+
+    const renderSubscriptionItem = ({ item }) => (
+        <View style={styles.card}>
+            <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>{item.title}</Text>
+                <Text style={styles.cardCost}>R$ {item.cost ? parseFloat(item.cost).toFixed(2) : '0.00'}</Text>
+            </View>
+            <Text style={styles.cardDate}>Vencimento: {item.dueDate || 'Não especificado'}</Text>
+            
+            <View style={styles.cardActions}>
+                <TouchableOpacity onPress={() => openEditModal(item)} style={styles.actionButton}>
+                    <Feather name="edit" size={18} color="#007bff" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleDeleteSubscription(item.id)} style={styles.actionButton}>
+                    <Feather name="trash-2" size={18} color="#dc3545" />
+                </TouchableOpacity>
+            </View>
+        </View>
     );
-  };
 
-  return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <View style={styles.logoContainer}>
-            <Icon name="shield" size={24} color="#fff" />
-          </View>
-          <Text style={styles.headerTitle}>GuardianApp</Text>
-        </View>
-        <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
-          <Icon name="log-out" size={16} color="#dc2626" />
-          <Text style={styles.logoutButtonText}>Sair</Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView style={styles.scrollViewContent}>
-        {/* Stats Cards */}
-        <View style={styles.statsContainer}>
-          <View style={[styles.card, styles.primaryCard]}>
-            <Text style={styles.cardDescription}>Total Mensal</Text>
-            <Text style={styles.cardTitle}>R$ {totalMonthly.toFixed(2)}</Text>
-            <View style={styles.cardDetail}>
-              <Icon name="dollar-sign" size={14} color="#fff" />
-              <Text style={styles.cardDetailText}>{subscriptions.length} assinaturas ativas</Text>
+    return (
+        <View style={styles.container}>
+            <View style={styles.header}>
+                <Text style={styles.headerTitle}>Minhas Assinaturas</Text>
+                <TouchableOpacity onPress={onLogout} style={styles.logoutButton}>
+                    <Feather name="log-out" size={24} color="#fff" />
+                </TouchableOpacity>
             </View>
-          </View>
 
-          <View style={styles.card}>
-            <Text style={styles.cardDescription}>Total Anual</Text>
-            <Text style={styles.cardTitleDark}>R$ {(totalMonthly * 12).toFixed(2)}</Text>
-            <View style={styles.cardDetailDark}>
-              <Icon name="calendar" size={14} color="#666" />
-              <Text style={styles.cardDetailTextDark}>Projeção de 12 meses</Text>
-            </View>
-          </View>
-
-          <View style={[styles.card, styles.secondaryCard]}>
-            <Text style={styles.cardDescription}>Economia Potencial</Text>
-            <Text style={styles.cardTitle}>R$ {(totalMonthly * 0.2).toFixed(2)}</Text>
-            <Text style={styles.cardDetailText}>Cancele serviços não utilizados</Text>
-          </View>
-        </View>
-
-        {/* Subscriptions List */}
-        <View style={styles.listHeader}>
-          <Text style={styles.listTitle}>Minhas Assinaturas</Text>
-          <TouchableOpacity style={styles.addButton}>
-            <Icon name="plus" size={16} color="#fff" />
-            <Text style={styles.addButtonText}>Adicionar Assinatura</Text>
-          </TouchableOpacity>
-        </View>
-
-        {subscriptions.map((sub) => (
-          <View key={sub.id} style={styles.subscriptionItem}>
-            <View style={styles.subscriptionInfo}>
-              <View style={styles.subscriptionNameCategory}>
-                <Text style={styles.subscriptionName}>{sub.name}</Text>
-                <View style={styles.categoryBadge}>
-                  <Text style={styles.categoryBadgeText}>{sub.category}</Text>
+            {isLoading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#0056b3" />
+                    <Text style={styles.loadingText}>Carregando dados da API...</Text>
                 </View>
-              </View>
-              <View style={styles.subscriptionDetails}>
-                <View style={styles.detailRow}>
-                  <Icon name="dollar-sign" size={14} color="#666" />
-                  <Text style={styles.detailText}>R$ {sub.price.toFixed(2)}/mês</Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Icon name="calendar" size={14} color="#666" />
-                  <Text style={styles.detailText}>Renovação: {new Date(sub.renewalDate).toLocaleDateString('pt-BR')}</Text>
-                </View>
-              </View>
-            </View>
-            <TouchableOpacity style={styles.deleteButton} onPress={() => handleDelete(sub.id)}>
-              <Icon name="trash-2" size={16} color="#dc2626" />
+            ) : (
+                <FlatList
+                    data={subscriptions}
+                    keyExtractor={item => item.id ? item.id.toString() : Math.random().toString()} 
+                    renderItem={renderSubscriptionItem}
+                    contentContainerStyle={styles.listContent}
+                    ListEmptyComponent={EmptyListComponent}
+                />
+            )}
+
+            {/* Botão Flutuante para Adicionar */}
+            <TouchableOpacity style={styles.addButton} onPress={() => setIsAddModalVisible(true)}>
+                <Feather name="plus" size={30} color="#fff" />
             </TouchableOpacity>
-          </View>
-        ))}
 
-        {subscriptions.length === 0 && (
-          <View style={styles.emptyStateCard}>
-            <Icon name="shield" size={60} color="#ccc" style={styles.emptyStateIcon} />
-            <Text style={styles.emptyStateTitle}>Nenhuma assinatura cadastrada</Text>
-            <Text style={styles.emptyStateText}>Comece adicionando suas primeiras assinaturas para gerenciá-las</Text>
-            <TouchableOpacity style={styles.emptyStateButton}>
-              <Icon name="plus" size={16} color="#fff" />
-              <Text style={styles.emptyStateButtonText}>Adicionar Primeira Assinatura</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </ScrollView>
-    </View>
-  );
+            {/* Modal para Adicionar Assinatura (CREATE) */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={isAddModalVisible}
+                onRequestClose={() => setIsAddModalVisible(false)}
+            >
+                 {/* ... Conteúdo do Modal de Adicionar (CREATE) ... */}
+                 <View style={styles.modalView}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Adicionar Assinatura</Text>
+                        
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Título (Ex: Netflix)"
+                            value={newTitle}
+                            onChangeText={setNewTitle}
+                        />
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Custo (Ex: 45.90)"
+                            value={newCost}
+                            onChangeText={setNewCost}
+                            keyboardType="numeric"
+                        />
+                         <TextInput
+                            style={styles.input}
+                            placeholder="Data de Vencimento (AAAA-MM-DD)"
+                            value={newDate}
+                            onChangeText={setNewDate}
+                            keyboardType="numbers-and-punctuation"
+                        />
+
+                        <TouchableOpacity style={styles.modalButton} onPress={handleAddSubscription}>
+                            <Text style={styles.buttonText}>Salvar Assinatura</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setIsAddModalVisible(false)}>
+                            <Text style={styles.buttonText}>Cancelar</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+            
+            {/* Modal para Editar Assinatura (UPDATE) */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={isEditModalVisible}
+                onRequestClose={() => setIsEditModalVisible(false)}
+            >
+                <View style={styles.modalView}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Editar Assinatura</Text>
+                        
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Título"
+                            value={editTitle}
+                            onChangeText={setEditTitle}
+                        />
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Custo"
+                            value={editCost}
+                            onChangeText={setEditCost}
+                            keyboardType="numeric"
+                        />
+                         <TextInput
+                            style={styles.input}
+                            placeholder="Data de Vencimento (AAAA-MM-DD)"
+                            value={editDate}
+                            onChangeText={setEditDate}
+                            keyboardType="numbers-and-punctuation"
+                        />
+
+                        <TouchableOpacity style={[styles.modalButton, styles.editButton]} onPress={handleUpdateSubscription}>
+                            <Text style={styles.buttonText}>Salvar Alterações</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setIsEditModalVisible(false)}>
+                            <Text style={styles.buttonText}>Cancelar</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+        </View>
+    );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f0f4f8',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logoContainer: {
-    width: 36,
-    height: 36,
-    backgroundColor: '#6a5acd',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderColor: '#ef4444',
-    borderWidth: 1,
-  },
-  logoutButtonText: {
-    color: '#dc2626',
-    marginLeft: 5,
-    fontWeight: '600',
-  },
-  scrollViewContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-    flexWrap: 'wrap', // Permite que os cards quebrem a linha em telas menores
-  },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    width: '31%', // Ajuste para 3 cards por linha, com algum espaçamento
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  primaryCard: {
-    backgroundColor: '#6a5acd',
-  },
-  secondaryCard: {
-    backgroundColor: '#8b5cf6',
-  },
-  cardDescription: {
-    fontSize: 13,
-    color: '#eee',
-    marginBottom: 5,
-  },
-  cardTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 10,
-  },
-  cardTitleDark: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
-  },
-  cardDetail: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    opacity: 0.9,
-  },
-  cardDetailDark: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    opacity: 0.9,
-  },
-  cardDetailText: {
-    color: '#fff',
-    fontSize: 12,
-    marginLeft: 5,
-  },
-  cardDetailTextDark: {
-    color: '#666',
-    fontSize: 12,
-    marginLeft: 5,
-  },
-  listHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  listTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#6a5acd',
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    color: '#fff',
-    marginLeft: 5,
-    fontWeight: '600',
-  },
-  subscriptionItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  subscriptionInfo: {
-    flex: 1,
-  },
-  subscriptionNameCategory: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  subscriptionName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginRight: 10,
-  },
-  categoryBadge: {
-    backgroundColor: '#e0e7ff',
-    borderRadius: 15,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  categoryBadgeText: {
-    color: '#4f46e5',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  subscriptionDetails: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 15,
-  },
-  detailText: {
-    fontSize: 13,
-    color: '#666',
-    marginLeft: 5,
-  },
-  deleteButton: {
-    padding: 8,
-    borderRadius: 8,
-    borderColor: '#ef4444',
-    borderWidth: 1,
-  },
-  emptyStateCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 30,
-    alignItems: 'center',
-    marginTop: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  emptyStateIcon: {
-    marginBottom: 20,
-  },
-  emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  emptyStateText: {
-    fontSize: 15,
-    color: '#666',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  emptyStateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#6a5acd',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-  },
-  emptyStateButtonText: {
-    color: '#fff',
-    marginLeft: 10,
-    fontWeight: '600',
-  },
+    container: { flex: 1, backgroundColor: '#f5f5f5' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#0056b3', paddingTop: 40 },
+    headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
+    logoutButton: { padding: 5 },
+    listContent: { padding: 20 },
+    card: { backgroundColor: '#fff', padding: 15, borderRadius: 8, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
+    cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+    cardCost: { fontSize: 18, fontWeight: 'bold', color: '#28a745' },
+    cardDate: { fontSize: 14, color: '#777', marginBottom: 10 },
+    cardActions: { flexDirection: 'row', justifyContent: 'flex-end' },
+    actionButton: { marginLeft: 15 },
+    emptyListText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: '#999' },
+    addButton: { position: 'absolute', width: 60, height: 60, alignItems: 'center', justifyContent: 'center', right: 30, bottom: 30, backgroundColor: '#ffc107', borderRadius: 30, elevation: 8 },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    loadingText: { marginTop: 10 },
+    // Estilos do Modal
+    modalView: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.5)' },
+    modalContent: { margin: 20, backgroundColor: "white", borderRadius: 10, padding: 35, alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 5, width: '80%' },
+    modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
+    input: { width: '100%', height: 50, borderColor: '#ccc', borderWidth: 1, borderRadius: 5, marginBottom: 10, paddingHorizontal: 10 },
+    modalButton: { padding: 10, borderRadius: 5, marginTop: 15, width: '100%', alignItems: 'center' },
+    cancelButton: { backgroundColor: '#6c757d', marginTop: 10 },
+    editButton: { backgroundColor: '#007bff' }, // Azul para salvar edição
+    buttonText: { color: '#fff', fontWeight: 'bold' }
 });
 
-export default Dashboard;
+const EmptyListComponent = () => (
+    <Text style={styles.emptyListText}>Nenhuma assinatura encontrada. Adicione uma nova!</Text>
+);
 
+export default Dashboard;

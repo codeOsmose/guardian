@@ -1,167 +1,178 @@
+// frontend/src/Register.js
 
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image } from 'react-native';
+import { 
+    StyleSheet, 
+    Text, 
+    View, 
+    TextInput, 
+    TouchableOpacity, 
+    Image, 
+    Alert,
+    ActivityIndicator 
+} from 'react-native';
 
-const Register = ({ onSwitchToLogin }) => {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+// URL base do seu backend Spring Boot. 
+const API_BASE_URL = 'http://10.0.2.2:8080';
 
-  const handleSubmit = async () => {
-    if (!name || !email || !password || !confirmPassword) {
-      Alert.alert('Erro', 'Por favor, preencha todos os campos.');
-      return;
-    }
+const Register = ({ setAuthStatus }) => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    if (password !== confirmPassword) {
-      Alert.alert('Erro', 'As senhas não coincidem.');
-      return;
-    }
+    // FUNÇÃO DE REGISTRO COM CONEXÃO REAL AO BACKEND
+    const handleRegister = async () => {
+        if (!email || !password || !confirmPassword) {
+            Alert.alert('Erro', 'Por favor, preencha todos os campos.');
+            return;
+        }
 
-    if (password.length < 6) {
-      Alert.alert('Erro', 'A senha deve ter no mínimo 6 caracteres.');
-      return;
-    }
+        if (password !== confirmPassword) {
+            Alert.alert('Erro', 'As senhas não coincidem.');
+            return;
+        }
 
-    setLoading(true);
-    try {
-      // Replace with your backend API endpoint
-      const response = await fetch('http://localhost:8080/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name, email, password }),
-      });
+        setLoading(true);
 
-      const data = await response.json();
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                // Assumindo que o endpoint de registro espera 'username' e 'password'
+                body: JSON.stringify({ username: email, password: password }),
+            });
 
-      if (response.ok) {
-        Alert.alert('Sucesso', 'Conta criada com sucesso! Faça login para continuar.');
-        onSwitchToLogin();
-      } else {
-        Alert.alert('Erro no Registro', data.message || 'Erro ao criar conta.');
-      }
-    } catch (error) {
-      console.error('Erro ao conectar com o servidor:', error);
-      Alert.alert('Erro', 'Não foi possível conectar com o servidor. Tente novamente mais tarde.');
-    } finally {
-      setLoading(false);
-    }
-  };
+            const data = await response.json();
 
-  return (
-    <View style={styles.container}>
-      <Image
-        source={require('./assets/shield.png')} // Certifique-se de ter um ícone de escudo em assets
-        style={styles.logo}
-      />
-      <Text style={styles.title}>Criar Conta</Text>
-      <Text style={styles.subtitle}>Comece a gerenciar suas assinaturas hoje</Text>
+            if (response.ok) {
+                // Sucesso no registro
+                Alert.alert(
+                    'Sucesso!', 
+                    'Usuário registrado com sucesso. Faça o login para continuar.'
+                );
+                
+                // Redireciona para a tela de Login
+                setAuthStatus('login'); 
+            } else {
+                // Falha no registro (ex: 409 Conflict se o usuário já existir)
+                const errorMessage = data.message || 'Erro ao tentar registrar. O usuário pode já existir.';
+                Alert.alert('Falha no Registro', errorMessage);
+                console.error('Erro de resposta do servidor:', data);
+            }
+        } catch (error) {
+            // Erro de rede ou servidor inacessível
+            console.error('Erro de conexão:', error);
+            Alert.alert(
+                'Erro de Conexão', 
+                'Não foi possível conectar ao servidor. Verifique se o backend está rodando em http://10.0.2.2:8080.'
+            );
+        } finally {
+            setLoading(false);
+        }
+    };
 
-      <TextInput
-        style={styles.input}
-        placeholder="Nome Completo"
-        autoCapitalize="words"
-        value={name}
-        onChangeText={setName}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        keyboardType="email-address"
-        autoCapitalize="none"
-        value={email}
-        onChangeText={setEmail}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Senha (mínimo 6 caracteres)"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Confirmar Senha"
-        secureTextEntry
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-      />
+    return (
+        <View style={styles.container}>
+            <Image source={require('./assets/shield.png')} style={styles.logo} />
+            <Text style={styles.title}>Novo Usuário</Text>
+            
+            <TextInput
+                style={styles.input}
+                placeholder="E-mail (Username)"
+                placeholderTextColor="#A9A9A9"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+            />
+            
+            <TextInput
+                style={styles.input}
+                placeholder="Senha"
+                placeholderTextColor="#A9A9A9"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+            />
+            
+            <TextInput
+                style={styles.input}
+                placeholder="Confirme a Senha"
+                placeholderTextColor="#A9A9A9"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+            />
 
-      <TouchableOpacity style={styles.button} onPress={handleSubmit} disabled={loading}>
-        <Text style={styles.buttonText}>{loading ? 'Criando conta...' : 'Criar Conta'}</Text>
-      </TouchableOpacity>
+            <TouchableOpacity 
+                style={styles.button} 
+                onPress={handleRegister}
+                disabled={loading}
+            >
+                {loading ? (
+                    <ActivityIndicator color="#fff" />
+                ) : (
+                    <Text style={styles.buttonText}>CADASTRAR</Text>
+                )}
+            </TouchableOpacity>
 
-      <TouchableOpacity onPress={onSwitchToLogin}>
-        <Text style={styles.loginText}>
-          Já tem uma conta? <Text style={styles.loginLink}>Faça login</Text>
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
+            <TouchableOpacity onPress={() => setAuthStatus('login')}>
+                <Text style={styles.loginText}>Já tem conta? Voltar para o Login</Text>
+            </TouchableOpacity>
+        </View>
+    );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f0f4f8',
-    padding: 20,
-  },
-  logo: {
-    width: 80,
-    height: 80,
-    marginBottom: 20,
-    tintColor: '#6a5acd',
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 30,
-  },
-  input: {
-    width: '100%',
-    height: 50,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  button: {
-    width: '100%',
-    height: 50,
-    backgroundColor: '#6a5acd',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  loginText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  loginLink: {
-    color: '#6a5acd',
-    fontWeight: 'bold',
-  },
+    container: {
+        flex: 1,
+        backgroundColor: '#f5f5f5',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+    },
+    logo: {
+        width: 80,
+        height: 80,
+        marginBottom: 20,
+        tintColor: '#0056b3',
+    },
+    title: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        marginBottom: 20,
+        color: '#333',
+    },
+    input: {
+        width: '100%',
+        backgroundColor: '#fff',
+        padding: 15,
+        borderRadius: 8,
+        marginBottom: 15,
+        borderWidth: 1,
+        borderColor: '#ddd',
+        color: '#333',
+    },
+    button: {
+        width: '100%',
+        backgroundColor: '#28a745', // Cor verde para cadastro
+        padding: 15,
+        borderRadius: 8,
+        alignItems: 'center',
+        marginTop: 10,
+    },
+    buttonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    loginText: {
+        marginTop: 20,
+        color: '#007bff',
+    },
 });
 
 export default Register;
-
